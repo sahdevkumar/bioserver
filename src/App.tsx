@@ -133,7 +133,7 @@ export default function App() {
               'bg-rose-50 text-rose-700 border border-rose-200'
             }`}>
               {isConnected ? <Wifi className="w-3 h-3" /> : isPolling ? <RefreshCw className="w-3 h-3 animate-spin" /> : <WifiOff className="w-3 h-3" />}
-              {isConnected ? 'Real-time Online' : isPolling ? 'Polling Mode (Vercel)' : 'Server Offline'}
+              {isConnected ? 'Real-time Online' : isPolling ? 'Connection Stable (Polling)' : 'Server Offline'}
             </div>
           </div>
         </div>
@@ -164,10 +164,7 @@ export default function App() {
                 <div className="flex items-start gap-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
                   <Info className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
                   <p className="text-xs text-indigo-700 leading-relaxed">
-                    {isPolling ? 
-                      "Note: You are on Vercel. Real-time updates are simulated via polling. For true real-time, use Cloud Run." :
-                      "Ensure the device is in the same network or the server is publicly accessible."
-                    }
+                    Ensure the device is in the same network or the server is publicly accessible via your App URL.
                   </p>
                 </div>
               </div>
