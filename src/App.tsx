@@ -22,40 +22,85 @@ export default function App() {
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [devices, setDevices] = useState<Record<string, DeviceStatus>>({});
   const [isConnected, setIsConnected] = useState(false);
+  const [isApiOnline, setIsApiOnline] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isPolling, setIsPolling] = useState(false);
+
+  const fetchState = async () => {
+    try {
+      const res = await fetch('/api/state');
+      if (res.ok) {
+        const data = await res.json();
+        setLogs(data.logs);
+        setDevices(data.devices);
+        setIsApiOnline(true);
+      }
+    } catch (err) {
+      console.error('Failed to fetch state:', err);
+      setIsApiOnline(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fetch initial state
   useEffect(() => {
-    fetch('/api/state')
-      .then(res => res.json())
-      .then(data => {
-        setLogs(data.logs);
-        setDevices(data.devices);
-        setLoading(false);
-      })
-      .catch(err => console.error('Failed to fetch state:', err));
+    fetchState();
   }, []);
 
-  // WebSocket for real-time updates
+  // WebSocket for real-time updates with polling fallback
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}`);
+    let ws: WebSocket | null = null;
+    let pollInterval: any = null;
 
-    ws.onopen = () => setIsConnected(true);
-    ws.onclose = () => setIsConnected(false);
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'NEW_LOGS') {
-        setLogs(prev => [...data.logs, ...prev].slice(0, 100));
-      } else if (data.type === 'DEVICE_UPDATE') {
-        setDevices(prev => ({
-          ...prev,
-          [data.device.sn]: data.device
-        }));
+    const connectWS = () => {
+      try {
+        ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+        ws.onopen = () => {
+          setIsConnected(true);
+          setIsPolling(false);
+          if (pollInterval) clearInterval(pollInterval);
+        };
+
+        ws.onclose = () => {
+          setIsConnected(false);
+          // Start polling if WS fails (common on Vercel)
+          if (!pollInterval) {
+            setIsPolling(true);
+            pollInterval = setInterval(fetchState, 5000);
+          }
+        };
+
+        ws.onerror = () => {
+          setIsConnected(false);
+        };
+
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === 'NEW_LOGS') {
+            setLogs(prev => [...data.logs, ...prev].slice(0, 100));
+          } else if (data.type === 'DEVICE_UPDATE') {
+            setDevices(prev => ({
+              ...prev,
+              [data.device.sn]: data.device
+            }));
+          }
+        };
+      } catch (e) {
+        console.error('WS Connection failed:', e);
+        setIsPolling(true);
+        pollInterval = setInterval(fetchState, 5000);
       }
     };
 
-    return () => ws.close();
+    connectWS();
+
+    return () => {
+      if (ws) ws.close();
+      if (pollInterval) clearInterval(pollInterval);
+    };
   }, []);
 
   const deviceList = useMemo(() => Object.values(devices), [devices]);
@@ -82,9 +127,13 @@ export default function App() {
             <h1 className="text-xl font-semibold tracking-tight">Attendance Log Server</h1>
           </div>
           <div className="flex items-center gap-4">
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${isConnected ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-              {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {isConnected ? 'Server Online' : 'Server Offline'}
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium ${
+              isConnected ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 
+              isPolling ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+              'bg-rose-50 text-rose-700 border border-rose-200'
+            }`}>
+              {isConnected ? <Wifi className="w-3 h-3" /> : isPolling ? <RefreshCw className="w-3 h-3 animate-spin" /> : <WifiOff className="w-3 h-3" />}
+              {isConnected ? 'Real-time Online' : isPolling ? 'Polling Mode (Vercel)' : 'Server Offline'}
             </div>
           </div>
         </div>
@@ -115,7 +164,10 @@ export default function App() {
                 <div className="flex items-start gap-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
                   <Info className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
                   <p className="text-xs text-indigo-700 leading-relaxed">
-                    Ensure the device is in the same network or the server is publicly accessible.
+                    {isPolling ? 
+                      "Note: You are on Vercel. Real-time updates are simulated via polling. For true real-time, use Cloud Run." :
+                      "Ensure the device is in the same network or the server is publicly accessible."
+                    }
                   </p>
                 </div>
               </div>
@@ -171,8 +223,17 @@ export default function App() {
                   <History className="w-5 h-5 text-slate-500" />
                   <h2 className="font-semibold">Attendance Logs</h2>
                 </div>
-                <div className="text-[10px] text-slate-400 uppercase font-bold">
-                  Showing last 100 records
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => { setLoading(true); fetchState(); }}
+                    className="p-2 hover:bg-slate-200 rounded-lg transition-colors text-slate-500"
+                    title="Refresh Logs"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  </button>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">
+                    Showing last 100 records
+                  </div>
                 </div>
               </div>
               

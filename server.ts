@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import bodyParser from 'body-parser';
-import { AttendanceLog, DeviceStatus } from './src/types.js';
+import { AttendanceLog, DeviceStatus } from './src/types.ts';
 
 const app = express();
 const httpServer = createServer(app);
@@ -124,6 +124,8 @@ async function setupVite() {
     });
   }
 }
+
+export default app;
 
 setupVite().then(() => {
   const PORT = 3000;
