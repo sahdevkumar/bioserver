@@ -1,0 +1,5 @@
+{
+  "name": "Biomax Attendance Server",
+  "description": "HTTP Push (ADMS) Server for Biomax BN60 and compatible attendance devices.",
+  "requestFramePermissions": []
+}
